@@ -1,19 +1,20 @@
 import ssl
+import socket
 from .block import JerichoBlock
 from .buffer import ChunkBuffer
-
+from collections import deque
 
 class JerichoSocket(object):
     """Simple wrapper around a socket object to supply client information
     with a socket.
     
     """
-    def __init__(self, manager, sock):
+    def __init__(self, sock):
         self.sock = sock
-        self.manager = manager
         self.ssl = isinstance(sock, ssl.SSLSocket)
         self.block = None
         self.state = None
+        self.write_buffer = deque()
         
     def handle_headers(self, headers):
         """Method is called with the headers dict when ready"""
@@ -31,9 +32,14 @@ class JerichoSocket(object):
         
         Reads bytes into the chunk buffer from the underlying socket.
         """
-        data = self.sock_read(1024)
-        if data == '':
-            pass # handle EOF
+        try:
+            data = self.sock_read(4096)
+        except socket.error as err:
+            self.close()
+            return True
+        if not data:
+            self.close()
+            return True
         self.buffer.write(data)
     
     def handle_write(self):
@@ -43,8 +49,13 @@ class JerichoSocket(object):
         
         NOTE: This is after handshaking is finished.
         """
-        pass
+        if self.write_buffer:
+            self.sock_write(self.write_buffer.popleft())
     
+    def write(self, data):
+        """This assumes correct sized blocks to be send"""
+        self.write_buffer.append(data)
+        
     def read(self):
         """Read data from the chunk buffer.
         
@@ -76,3 +87,9 @@ class JerichoSocket(object):
             return self.sock.write(data)
         else:
             return self.sock.send(data)
+        
+    def close(self):
+        self.buffer.close()
+        self.sock.shutdown(socket.SHUT_RD)
+        self.sock.close()
+        pass

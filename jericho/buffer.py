@@ -91,6 +91,7 @@ class ChunkBuffer(object):
         self.buffer = deque()
         self.length = 0
         self.lock = threading.Lock()
+        self.eof = False
         
     def write(self, data):
         with self.lock:
@@ -105,7 +106,7 @@ class ChunkBuffer(object):
         
     def read(self, size=None):
         size = self.chunk_size
-        if len(self) < self.chunk_size:
+        if len(self) < self.chunk_size and (not self.eof):
             raise BufferError("Not enough data available.")
         with self.lock:
             self.length -= size
@@ -122,3 +123,6 @@ class ChunkBuffer(object):
     def __iter__(self):
         while True:
             yield self.read()
+            
+    def close(self):
+        self.eof = True

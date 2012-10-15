@@ -2,19 +2,121 @@ from __future__ import unicode_literals
 import socket
 import hashlib
 import math
-import buffer
+import threading
 import random
 import select
-from . import JerichoError, chunks
 import ssl
+from . import JerichoError, chunks
+from .buffer import ChunkBuffer
+from .block import JerichoBlock
+from .sock import JerichoSocket
+import handshake
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 handshakes = {
               1: "ix{ix:0=4d}_id{id:0=8d}_pw{pw:s}_bc{bc:0=6d}_am{am:0=4d}"
               }
 
+class JerichoClient(JerichoBlock):
+    def __init__(self, host, port=9555, passwd='',
+                 amount=4, block_size=1024,
+                 ssl=False, version=1):
+        if not isinstance(amount, int):
+            raise JerichoError("'amount' has to be an integer.")
+        uid = random.getrandbits(24)
+        super(JerichoClient, self).__init__(uid=uid, amount=amount)
 
-class JerichoClient(object):
+        self.host = host
+        self.port = port
+        self.ssl = ssl
+        self.version = version
+        self.amount = 4
+        
+        self.block_size = block_size
+        self.write_buffer = ChunkBuffer(block_size)
+
+        self.passwd = hashlib.sha256(passwd).hexdigest()
+
+        self.running = threading.Event()
+        
+    def connect(self):
+        for index, sock in enumerate(self.sockets):
+            try:
+                sock = socket.create_connection((self.host, self.port),
+                                            30.0)
+            except socket.timeout as err:
+                raise JerichoError("Could not connect to host. Socket timeout.")
+            else:
+                #sock.setblocking(0)
+                if self.ssl:
+                    sock = ssl.wrap_socket(sock)
+                sock = JerichoSocket(sock)
+                sock.index = index
+                self.add(sock, block_size=self.block_size, index=index)
+        
+        waiting_write = self.sockets[:]
+        waiting_read = self.sockets[:]
+        while True:
+            readable, writeable, erroring = select.select(waiting_read,
+                                                          waiting_write,
+                                                          [], 5.0)
+            for sock in writeable:
+                if sock.state in (handshake.SEND, None):
+                    if handshake.client_handshake(self, sock):
+                        waiting_write.remove(sock)
+            
+            for sock in readable:
+                #logging.debug(sock.state)
+                if sock.state == handshake.CHECK:
+                    logging.debug("Checking")
+                    try:
+                        ret = handshake.client_handshake(self, sock)
+                    except JerichoError:
+                        self.close()
+                        raise
+                    else:
+                        if ret:
+                            logging.debug("Accepted handshake")
+                            waiting_read.remove(sock)
+                            
+            if (not waiting_read) and (not waiting_write):
+                break
+        self.start()
+        return self
+    
+    def run(self):
+        read_sockets = self.sockets[:]
+        write_sockets = self.sockets[:]
+        while not self.running.is_set():
+            readable, writeable, erroring = select.select(read_sockets,
+                                                          write_sockets,
+                                                          read_sockets + write_sockets,
+                                                          60.0)
+            for sock in readable:
+                print "Client", sock
+                if sock.handle_read():
+                    print "EOF in client socket"
+                    read_sockets.remove(sock)
+                
+            for sock in writeable:
+                sock.handle_write()
+                
+            for sock in erroring:
+                print sock
+                
+    def start(self):
+        self.thread = threading.Thread(target=self.run)
+        self.thread.daemon = True
+        self.thread.start()
+        
+    def close(self):
+        self.running.set()
+        self.thread.join(3.0)
+        
+class JerichoClientOld(object):
     def __init__(self, host, port=9555, passwd='', amount=4, block_size=1024,
                  ssl=False, version=1):
         super(JerichoClient, self).__init__()
@@ -129,11 +231,7 @@ class JerichoClient(object):
     def send_data(self):
         """
         Splits `self.buffer` into equal sized strings and sends them
-        multiplexed over the sockets.
-        
-        Each socket sends their part with \xfe as separator. The server should
-        keep count of where each socket is since there is no safety check for
-        this in the client.
+        inverse multiplexed over the sockets.
         """
         data = self.buffer.read(self.chunk_size)
         for sock, chunk in zip(self.sockets, chunks(data, self.block_size)):

@@ -1,6 +1,7 @@
 from . import JerichoError
 from .buffer import ChunkBuffer
-
+import logging
+logger = logging.getLogger(__name__)
 
 class JerichoBlock(object):
     """A block of several JerichoSockets that corrospond to the same UID"""
@@ -29,6 +30,7 @@ class JerichoBlock(object):
         if not self.block_size == block_size and self.block_size is not None:
             raise JerichoError(u"Block size invalid.")
         self.block_size = block_size
+        self.chunk_size = block_size*len(self.sockets)
         self.sockets[index] = sock
         
     def read(self):
@@ -53,4 +55,8 @@ class JerichoBlock(object):
     def handle_write(self):
         for sock, data in zip(self.sockets, self.write_buffer):
             sock.write(data)
+            
+    def close(self):
+        for sock in self.sockets:
+            sock.close()
             
