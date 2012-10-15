@@ -119,3 +119,6 @@ class ChunkBuffer(object):
     def __len__(self):
         return self.length
     
+    def __iter__(self):
+        while True:
+            yield self.read()
