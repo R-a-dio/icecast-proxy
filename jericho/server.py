@@ -30,7 +30,8 @@ class JerichoServer(threading.Thread):
         self.reading_clients = []
         self.writing_clients = []
         
-        self.blocks = []
+        self.blocks = {}
+        self.block_list = []
         
         self.daemon = True
         self.name = "JerichoServer"
@@ -54,13 +55,15 @@ class JerichoServer(threading.Thread):
         return self
     
     def run(self):
-        print "running"
         while not self.running.is_set():
-            readable, writeable, erroring = select.select(
+            try:
+                readable, writeable, erroring = select.select(
                                                  self.reading_clients,
                                                  self.writing_clients,
                                                  self.reading_clients + self.writing_clients,
                                                  1.0)
+            except socket.error:
+                pass
             for sock in readable:
                 if sock == self.socket:
                     try:
@@ -71,7 +74,7 @@ class JerichoServer(threading.Thread):
                     logging.debug("Accepting socket.")
                 elif sock.state == handshake.READY:
                     if sock.handle_read():
-                        print "EOF in server socket"
+                        print "EOF in server socket", getattr(sock, 'index', None)
                         self.reading_clients.remove(sock)
                 else:
                     logging.debug("Attempting handshake")
@@ -89,7 +92,7 @@ class JerichoServer(threading.Thread):
                     if not response:
                         logging.debug("Not all of our response has been sent.")
                         continue
-                    sock.handle_headers(response)
+                    sock.handle_headers(response, block_store=self.blocks)
                     self.reading_clients.append(sock)
                     self.register_block(sock.block)
                     
@@ -102,8 +105,8 @@ class JerichoServer(threading.Thread):
 
     def register_block(self, block):
         logging.debug("Registering new block: {:s}".format(repr(block)))
-        if not block in self.blocks:
-            self.blocks.append(block)
+        if not block in self.block_list:
+            self.block_list.append(block)
         
     def login(self, pw):
         logging.debug("Checking login.")

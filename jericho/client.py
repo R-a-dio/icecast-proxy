@@ -43,14 +43,13 @@ class JerichoClient(JerichoBlock):
         self.running = threading.Event()
         
     def connect(self):
-        for index, sock in enumerate(self.sockets):
+        for index in xrange(self.amount):
             try:
                 sock = socket.create_connection((self.host, self.port),
                                             30.0)
             except socket.timeout as err:
                 raise JerichoError("Could not connect to host. Socket timeout.")
             else:
-                #sock.setblocking(0)
                 if self.ssl:
                     sock = ssl.wrap_socket(sock)
                 sock = JerichoSocket(sock)
@@ -60,16 +59,23 @@ class JerichoClient(JerichoBlock):
         waiting_write = self.sockets[:]
         waiting_read = self.sockets[:]
         while True:
-            readable, writeable, erroring = select.select(waiting_read,
+            try:
+                readable, writeable, erroring = select.select(waiting_read,
                                                           waiting_write,
                                                           [], 5.0)
+            except socket.error as err:
+                for sock in waiting_read[:]:
+                    try:
+                        select.select([sock], [], [], 0)
+                    except socket.error as err:
+                        waiting_read.remove(sock)
+                continue
             for sock in writeable:
                 if sock.state in (handshake.SEND, None):
                     if handshake.client_handshake(self, sock):
                         waiting_write.remove(sock)
-            
+                        
             for sock in readable:
-                #logging.debug(sock.state)
                 if sock.state == handshake.CHECK:
                     logging.debug("Checking")
                     try:
@@ -83,6 +89,7 @@ class JerichoClient(JerichoBlock):
                             waiting_read.remove(sock)
                             
             if (not waiting_read) and (not waiting_write):
+                print "Done handshake"
                 break
         self.start()
         return self
@@ -91,14 +98,17 @@ class JerichoClient(JerichoBlock):
         read_sockets = self.sockets[:]
         write_sockets = self.sockets[:]
         while not self.running.is_set():
-            readable, writeable, erroring = select.select(read_sockets,
+            try:
+                readable, writeable, erroring = select.select(read_sockets,
                                                           write_sockets,
                                                           read_sockets + write_sockets,
-                                                          60.0)
+                                                          5.0)
+            except socket.error as err:
+                pass
             for sock in readable:
                 print "Client", sock
                 if sock.handle_read():
-                    print "EOF in client socket"
+                    print "EOF in client socket", getattr(sock, 'index', None)
                     read_sockets.remove(sock)
                 
             for sock in writeable:
@@ -108,11 +118,13 @@ class JerichoClient(JerichoBlock):
                 print sock
                 
     def start(self):
-        self.thread = threading.Thread(target=self.run)
+        self.thread = threading.Thread(target=self.run,
+                                       name="JerichoClient {:d}".format(self.uid))
         self.thread.daemon = True
         self.thread.start()
         
     def close(self):
+        super(JerichoClient, self).close()
         self.running.set()
         self.thread.join(3.0)
         

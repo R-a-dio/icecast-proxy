@@ -105,24 +105,32 @@ class ChunkBuffer(object):
                 self.buffer.append(chunk)
         
     def read(self, size=None):
-        size = self.chunk_size
-        if len(self) < self.chunk_size and (not self.eof):
-            raise BufferError("Not enough data available.")
         with self.lock:
-            self.length -= size
-            return self.buffer.popleft()
+            if len(self) < self.chunk_size and (not self.eof):
+                raise BufferError("Not enough data available.")
+            data = self.buffer.popleft()
+            self.length -= len(data)
+            return data
     
     def readable(self):
-        if len(self) < self.chunk_size:
+        if len(self) < self.chunk_size and (not self.eof):
             return False
         return True
     
+    def info(self):
+        info_format = "Chunk size: {:d}\nChunks: {:d}\nLength: {:d}\nEOF: {:b}"
+        return info_format.format(self.chunk_size, len(self.buffer),
+                                self.length, self.eof)
+        
     def __len__(self):
         return self.length
     
     def __iter__(self):
-        while True:
-            yield self.read()
-            
+        try:
+            while True:
+                yield self.read()
+        except BufferError:
+            pass
+        
     def close(self):
         self.eof = True

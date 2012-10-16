@@ -3,12 +3,24 @@ import socket
 from .. import handshake
 from .. import sock
 
+try:
+    socketpair = socket.socketpair
+except AttributeError:
+    def socketpair():
+        listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listen.bind(('localhost', 60000))
+        listen.listen(1)
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(('localhost', 60000))
+        server, address = listen.accept()
+        return client, server
+    
 class TestClientHandshake(unittest.TestCase):
     pass
 
 class TestServerHandshake(unittest.TestCase):
     def setUp(self):
-        self.client, self.server = socket.socketpair()
+        self.client, self.server = socketpair()
         self.client = sock.JerichoSocket(self.client)
         self.server = sock.JerichoSocket(self.server)
         self.addCleanup(self.clean)
