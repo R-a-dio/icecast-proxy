@@ -4,7 +4,11 @@ from threading import current_thread
 import config
 import collections
 from jericho.buffer import Buffer
+from audio import icecast
+import collections
 
+STuple = collections.namedtuple('STuple', ['buffer', 'info'])
+ITuple = collections.namedtuple('ITuple', ['user', 'useragent'])
 
 def generate_info(mount):
     return {'host': config.icecast_host,
@@ -58,7 +62,6 @@ class IcyManager(object):
         self.context = {}
         
     def login(self, user=None, password=None):
-        print "LOGIN", user, password
         if user is None or password is None:
             return False
         if user == 'source':
@@ -74,25 +77,29 @@ class IcyManager(object):
                 return True
             return False
             
-    def register_source(self, mount, source):
+    def register_source(self, client):
+        """Register a connected icecast source to be used for streaming to
+        the main server."""
         try:
-            context = self.context[mount]
+            context = self.context[client.mount]
         except KeyError:
-            context = IcyContext(mount)
-            self.context[mount] = context
-        context.append(source)
+            context = IcyContext(client.mount)
+            self.context[client.mount] = context
+        context.append(client)
         if not context.icecast.connected():
-            self.context.start_icecast()
+            context.start_icecast()
             
-    def remove_source(self, mount, source):
+    def remove_source(self, client):
+        """Removes a connected icecast source from the list of tracked
+        sources to be used for streaming."""
         try:
-            context = self.context[mount]
+            context = self.context[client.mount]
         except KeyError:
             # We can be sure there is no source when the mount is unknown
             pass
         else:
             try:
-                context.remove(source)
+                context.remove(client)
             except ValueError:
                 # Source isn't in the sources list?
                 print "UNKNOWN SOURCE TRIED TO BE REMOVED"
@@ -100,36 +107,64 @@ class IcyManager(object):
                 if not context.sources:
                     context.stop_icecast()
         
+    def send_metadata(self, metadata, client):
+        """Sends a metadata command to the underlying correct
+        :class:`IcyContext`: class."""
+        if not client.mount in self.context:
+            return
+        self.context[client.mount].send_metadata(metadata, client)
         
 class IcyContext(object):
     """A class that is the context of a single icecast mountpoint."""
     def __init__(self, mount):
         super(IcyContext, self).__init__()
+        #: Set to last value returned by :attr:`source`:
+        self.current_source = None
+        
         # Create a buffer that always returns an empty string (EOF)
         self.eof_buffer = Buffer()
         self.eof_buffer.close()
         
         self.mount = mount
+        #: Deque of tuples of the format STuple(source, ITuple(user, useragent))
         self.sources = collections.deque()
         
         self.icecast_info = generate_info(mount)
         self.icecast = icecast.Icecast(self, self.icecast_info)
         
+        self.saved_metadata = {}
+        
     def append(self, source):
         """Append a source client to the list of sources for this context."""
-        self.sources.append(source)
+        self.sources.append(STuple(source.buffer,
+                                   ITuple(source.user, source.useragent)))
         
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""
-        self.sources.remove(source)
+        self.sources.remove(STuple(source.buffer,
+                                   ITuple(source.user, source.useragent)))
         
     @property
     def source(self):
-        """Returns the first source in the :attr:`sources`: deque."""
+        """Returns the first source in the :attr:`sources`: deque.
+        
+        If :attr:`sources`: is empty it returns :attr:`eof_buffer`: instead
+        """
         try:
-            return self.sources[0]
+            source = self.sources[0]
         except IndexError:
             return self.eof_buffer
+        else:
+            if not self.current_source is source:
+                # We changed source sir. Send saved metadata if any.
+                if source in self.saved_metadata:
+                    metadata = self.saved_metadata[source]
+                    self.icecast.set_metadata(metadata)
+                else:
+                    # No saved metadata, send an empty one
+                    self.icecast.set_metadata(u'')
+            self.current_source = source
+            return source.buffer
         
     def read(self, size=4096, timeout=None):
         """Reads at most :obj:`size`: of bytes from the first source in the
@@ -147,3 +182,23 @@ class IcyContext(object):
         """Calls the :class:`icecast.Icecast`: :meth:`icecast.Icecast.close`:
         method of this context."""
         self.icecast.close()
+        
+    def send_metadata(self, metadata, client):
+        """Checks if client is the currently active source on this mountpoint
+        and then sends the metadata. If the client is not the active source
+        the metadata is saved for if the current source drops out."""
+        try:
+            source = self.sources[0]
+        except IndexError:
+            # No source, why are we even getting metadata ignore it
+            return
+        if (source.info.user == client.user and
+                    source.info.username == client.username):
+            # Current source send metadata to us! yay
+            self.icecast.set_metadata(metadata) # Lol consistent naming (not)
+        else:
+            for source in self.sources:
+                if (source.info.user == client.user and
+                        source.info.username == client.username):
+                    # Save the metadata
+                    self.saved_metadata[source] = metadata

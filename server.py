@@ -7,6 +7,13 @@ import threading
 from jericho.buffer import Buffer
 
 
+class IcyClient(object):
+    def __init__(self, buffer, mount, user=None, useragent=None):
+        self.user = user
+        self.useragent = useragent
+        self.mount = mount
+        self.buffer = buffer
+        
 class IcyRequestHandler(BaseHTTPRequestHandler):
     manager = manager.IcyManager()
     def _get_login(self):
@@ -18,7 +25,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return login.decode("base64").split(":", 1)
         
     def do_SOURCE(self):
-        print self.path
+        self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path # oh so simple
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
@@ -30,7 +37,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         self.mp3_buffer = Buffer()
-        self.manager.register_source(self.mount, self.mp3_buffer)
+        self.icy_client = IcyClient(self.mp3_buffer,
+                                   self.mount,
+                                   user=user,
+                                   useragent=useragent)
+        self.manager.register_source(self.icy_client)
         try:
             while True:
                 data = self.rfile.read(1024)
@@ -39,13 +50,21 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     break
                 self.mp3_buffer.write(data)
         finally:
-            self.manager.remove_source(self.mount, self.mp3_buffer)
+            self.manager.remove_source(self.icy_client)
         
     def do_GET(self):
+        parsed_url = urlparse.urlparse(self.path)
+        parsed_query = urlparse.parse_qs(parse.query)
         user, password = self._get_login()
+        if user is None and password is None:
+            if 'pass' in parsed_query:
+                try:
+                    user, password = parsed_query['pass'][0].split('|', 1)
+                except (ValueError, IndexError, KeyError):
+                    user, password = (None, None)
         if (self.login(user=user, password=password)):
-            print "Logged in correctly"
-            
+            self.client = IcyClient(None, parsed_query.get('mount', ''),
+                                    user, password)
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/xml")
@@ -58,9 +77,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     logging.warning("Broken pipe exception, ignoring")
                 else:
                     logging.exception("Error in request handler")
-                
-            parse = urlparse.parse_qs(self.path)
-            print parse
+            song = parsed_query.get('song', None)
+            if not song is None:
+                metadata = fix_encoding(song[0])
+                self.manager.send_metadata(metadata=metadata, self.client)
+            print parsed_query
         else:
             self.send_response(401)
             self.end_headers()
@@ -69,6 +90,17 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
     def login(self, user=None, password=None):
         return self.manager.login(user, password)
 
+
+def fix_encoding(metadata):
+    try:
+        try:
+            return unicode(metadata, 'utf-8', 'strict').strip()
+        except (UnicodeDecodeError):
+            return unicode(metadata, 'shiftjis', 'replace').strip()
+    except (TypeError):
+        return metadata.strip()
+    
+        
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     timeout = 0.5
     def finish_request(self, request, client_address):
