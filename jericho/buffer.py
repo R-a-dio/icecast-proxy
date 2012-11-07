@@ -12,8 +12,8 @@ from . import chunks
 MAX_BUFFER = 1024**2*16
 
 class Buffer(object):
-    def __init__(self, max_size=MAX_BUFFER):
-        self.buffers = deque(maxlen=5)
+    def __init__(self, max_size=MAX_BUFFER, deques=5):
+        self.buffers = deque(maxlen=deques)
         self.max_size = max_size
         self.lock = threading.Lock()
         self.closing = False

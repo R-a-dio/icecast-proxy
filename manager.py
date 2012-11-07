@@ -6,9 +6,13 @@ import collections
 from jericho.buffer import Buffer
 from audio import icecast
 import collections
+import logging
 
+
+logger = logging.getLogger('server.manager')
 STuple = collections.namedtuple('STuple', ['buffer', 'info'])
 ITuple = collections.namedtuple('ITuple', ['user', 'useragent'])
+
 
 def generate_info(mount):
     return {'host': config.icecast_host,
@@ -74,7 +78,9 @@ class IcyManager(object):
                          "AND pass=SHA1(%s) AND privileges>2;"),
                         (user, password))
             for row in cur:
+                logger.info("Logged in user: {:s}", user)
                 return True
+            logger.info("Failed login user: {:s}", user)
             return False
             
     def register_source(self, client):
@@ -111,6 +117,8 @@ class IcyManager(object):
         """Sends a metadata command to the underlying correct
         :class:`IcyContext`: class."""
         if not client.mount in self.context:
+            logger.info("Received metadata for non-existant mountpoint %s",
+                        client.mount)
             return
         self.context[client.mount].send_metadata(metadata, client)
         
@@ -134,6 +142,12 @@ class IcyContext(object):
         
         self.saved_metadata = {}
         
+    def __repr__(self):
+        return "IcyContext(mount={:s}, user count={:d})".format(
+                                                                self.mount,
+                                                                len(self.sources)
+                                                                )
+        
     def append(self, source):
         """Append a source client to the list of sources for this context."""
         self.sources.append(STuple(source.buffer,
@@ -156,6 +170,10 @@ class IcyContext(object):
             return self.eof_buffer
         else:
             if not self.current_source is source:
+                logger.info("Changing source on %s from '%s' to '%s'.",
+                            self.mount, 'None' if self.current_source is None \
+                                        else self.current_source.info.user,
+                            source.info.user)
                 # We changed source sir. Send saved metadata if any.
                 if source in self.saved_metadata:
                     metadata = self.saved_metadata[source]
@@ -191,14 +209,14 @@ class IcyContext(object):
             source = self.sources[0]
         except IndexError:
             # No source, why are we even getting metadata ignore it
+            logger.warning("Received metadata while we have no mountpoint %s",
+                           self.mount)
             return
-        if (source.info.user == client.user and
-                    source.info.username == client.username):
+        if (source.info.user == client.user):
             # Current source send metadata to us! yay
             self.icecast.set_metadata(metadata) # Lol consistent naming (not)
         else:
             for source in self.sources:
-                if (source.info.user == client.user and
-                        source.info.username == client.username):
+                if (source.info.user == client.user):
                     # Save the metadata
                     self.saved_metadata[source] = metadata
