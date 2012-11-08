@@ -75,7 +75,7 @@ class IcyManager(object):
                 return False
         with MySQLCursor() as cur:
             cur.execute(("SELECT * FROM users WHERE user=%s "
-                         "AND pass=SHA1(%s) AND privileges>2;"),
+                         "AND pass=SHA1(%s) AND privileges>1;"),
                         (user, password))
             for row in cur:
                 return True
