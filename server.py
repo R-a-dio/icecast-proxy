@@ -129,11 +129,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 
                 try:
                     result = urllib2.urlopen(request).read()
-                except HTTPError as err:
+                except urllib2.HTTPError as err:
                     self.send_response(err.code)
                     self.end_headers()
                     return
-                except URLError as err:
+                except urllib2.URLError as err:
                     self.send_reponse(501)
                     self.end_headers()
                     return
