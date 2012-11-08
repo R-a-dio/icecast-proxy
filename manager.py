@@ -78,9 +78,9 @@ class IcyManager(object):
                          "AND pass=SHA1(%s) AND privileges>2;"),
                         (user, password))
             for row in cur:
-                logger.info("Logged in user: {:s}", user)
+                logger.info("Logged in user: %s", user)
                 return True
-            logger.info("Failed login user: {:s}", user)
+            logger.info("Failed login user: %s", user)
             return False
             
     def register_source(self, client):
@@ -108,7 +108,7 @@ class IcyManager(object):
                 context.remove(client)
             except ValueError:
                 # Source isn't in the sources list?
-                print "UNKNOWN SOURCE TRIED TO BE REMOVED"
+                logger.warning('An unknown source tried to be removed. Logic error')
             finally:
                 if not context.sources:
                     context.stop_icecast()
