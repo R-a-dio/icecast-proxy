@@ -154,6 +154,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             
     def login(self, user=None, password=None):
         return self.manager.login(user, password)
+    
+    def log_message(self, *args, **kwargs):
+        """Disable logging, we don't need it"""
+        pass
 
 
 def fix_encoding(metadata):
