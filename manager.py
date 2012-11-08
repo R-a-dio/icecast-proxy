@@ -78,9 +78,7 @@ class IcyManager(object):
                          "AND pass=SHA1(%s) AND privileges>2;"),
                         (user, password))
             for row in cur:
-                logger.info("Logged in user: %s", user)
                 return True
-            logger.info("Failed login user: %s", user)
             return False
             
     def register_source(self, client):
@@ -170,7 +168,7 @@ class IcyContext(object):
             return self.eof_buffer
         else:
             if not self.current_source is source:
-                logger.info("Changing source on %s from '%s' to '%s'.",
+                logger.info("%s: Changing source from '%s' to '%s'.",
                             self.mount, 'None' if self.current_source is None \
                                         else self.current_source.info.user,
                             source.info.user)
@@ -209,14 +207,16 @@ class IcyContext(object):
             source = self.sources[0]
         except IndexError:
             # No source, why are we even getting metadata ignore it
-            logger.warning("Received metadata while we have no mountpoint %s",
+            logger.warning("%s: Received metadata while we have none",
                            self.mount)
             return
         if (source.info.user == client.user):
             # Current source send metadata to us! yay
+            logger.info("%s:metadata.update: %s", self.mount, metadata)
             self.icecast.set_metadata(metadata) # Lol consistent naming (not)
         else:
             for source in self.sources:
                 if (source.info.user == client.user):
                     # Save the metadata
+                    logger.info("%s:metadata.save: %s", self.mount, metadata)
                     self.saved_metadata[source] = metadata

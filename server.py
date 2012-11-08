@@ -46,8 +46,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.mount = self.path # oh so simple
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
+            logger.info("source: User '%s' logged in correctly.", user)
             self.send_response(200)
         else:
+            logger.info("source: User '%s' failed to login from %s.", 
+                        user, str(self.client_address))
             self.send_response(401)
             self.end_headers()
             return
@@ -69,6 +72,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     break
                 self.mp3_buffer.write(data)
         finally:
+            logger.info("source: User '%s' logged off.", user)
             self.manager.remove_source(self.icy_client)
         
     def do_GET(self):
@@ -113,9 +117,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write('<?xml version="1.0"?>\n<iceresponse><message>Metadata update successful</message><return>1</return></iceresponse>')
                 except IOError as err:
                     if hasattr(err, 'errno') and err.errno == 32:
-                        logging.warning("Broken pipe exception, ignoring")
+                        logger.warning("Broken pipe exception, ignoring")
                     else:
-                        logging.exception("Error in request handler")
+                        logger.exception("Error in request handler")
             elif parsed_url.path == "/admin/listclients":
                 auth = "{:s}:{:s}".format('source', config.icecast_pass)
                 auth = auth.encode('base64')
