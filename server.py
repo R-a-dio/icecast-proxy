@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
 import urlparse
@@ -7,6 +9,7 @@ import threading
 from jericho.buffer import Buffer
 import config
 import urllib2
+import signal
 
 
 MAX_BUFFER = 10488
@@ -203,3 +206,16 @@ def start():
 def close():
     _server_event.set()
     _server_thread.join(10.0)
+
+if __name__ == "__main__":
+    import time
+    killed = threading.Event()
+    def signal_handler(signum, frame):
+        close()
+        killed.set()
+    start()
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    while not killed.is_set():
+        time.sleep(5)
+    
