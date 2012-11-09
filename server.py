@@ -48,6 +48,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         if (self.login(user=user, password=password)):
             logger.info("source: User '%s' logged in correctly.", user)
             self.send_response(200)
+            self.end_headers()
         else:
             logger.info("source: User '%s' failed to login from %s.", 
                         user, str(self.client_address))
