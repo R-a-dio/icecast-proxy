@@ -1,7 +1,7 @@
 import MySQLdb
 import MySQLdb.cursors
 import config
-
+from threading import current_thread
 
 class MySQLCursor:
     """Return a connected MySQLdb cursor object"""
