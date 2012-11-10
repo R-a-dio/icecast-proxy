@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import socket
 from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
 import urlparse
@@ -12,6 +13,7 @@ import urllib2
 import signal
 
 
+socket.setdefaulttimeout(5.0)
 MAX_BUFFER = 10488
 MAX_DEQUES = 4
 logger = logging.getLogger('server')
@@ -46,19 +48,29 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.mount = self.path # oh so simple
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
+            if user == 'source':
+                # No need to try; except because the self.login makes sure
+                # we can split it.
+                user, password = password.split('|')
             logger.info("source: User '%s' logged in correctly.", user)
             self.send_response(200)
             self.end_headers()
         else:
-            logger.info("source: User '%s' failed to login from %s.", 
-                        user, str(self.client_address))
+            if user == 'source':
+                # We need to try; except here because we can't be certain
+                # it contains a | at all.
+                try:
+                    user, password = password.split('|')
+                except ValueError as err:
+                    logger.info("source: Failed login, no separator found "
+                                "from %s.", str(self.client_address))
+                else:
+                    logger.info("source: User '%s' failed to login from %s.", 
+                                user, str(self.client_address))
             self.send_response(401)
             self.end_headers()
             return
-        if user == 'source':
-            # No need to try; except because the self.login makes sure
-            # we can split it.
-            user, password = password.split('|')
+
         self.mp3_buffer = Buffer(max_size=MAX_BUFFER,
                                  deques=MAX_DEQUES)
         self.icy_client = IcyClient(self.mp3_buffer,
