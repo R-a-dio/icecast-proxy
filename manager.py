@@ -6,7 +6,7 @@ from audio import icecast
 import collections
 import logging
 from database import MySQLCursor
-
+import bcrypt
 
 logger = logging.getLogger('server.manager')
 STuple = collections.namedtuple('STuple', ['buffer', 'info'])
@@ -42,10 +42,12 @@ class IcyManager(object):
                 return False
         with MySQLCursor() as cur:
             cur.execute(("SELECT * FROM users WHERE user=%s "
-                         "AND pass=SHA1(%s) AND privileges>1;"),
-                        (user, password))
+                         "AND privileges>1 LIMIT 1;"),
+                        (user,))
             for row in cur:
-                return True
+                hash = row['pass']
+                if bcrypt.hashpw(password, hash) == hash:
+                    return True
             return False
             
     def register_source(self, client):
