@@ -11,6 +11,7 @@ from jericho.buffer import Buffer
 import config
 import urllib2
 import signal
+import collections
 
 
 socket.setdefaulttimeout(5.0)
@@ -31,8 +32,10 @@ class IcyClient(object):
                                                             self.mount,
                                                             self.useragent,
                                                             self.user)
-        
-        
+IcyClient = collections.namedtuple('IcyClient', 
+                                   ('buffer', 'mount', 'user', 'useragent'))
+
+
 class IcyRequestHandler(BaseHTTPRequestHandler):
     manager = manager.IcyManager()
     def _get_login(self):
@@ -71,9 +74,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        self.mp3_buffer = Buffer(max_size=MAX_BUFFER,
+        self.audio_buffer = Buffer(max_size=MAX_BUFFER,
                                  deques=MAX_DEQUES)
-        self.icy_client = IcyClient(self.mp3_buffer,
+        self.icy_client = IcyClient(self.audio_buffer,
                                    self.mount,
                                    user=user,
                                    useragent=self.useragent)
@@ -83,7 +86,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 data = self.rfile.read(1024)
                 if data == '':
                     break
-                self.mp3_buffer.write(data)
+                self.audio_buffer.write(data)
         finally:
             logger.info("source: User '%s' logged off.", user)
             self.manager.remove_source(self.icy_client)

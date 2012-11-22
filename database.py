@@ -34,3 +34,29 @@ class MySQLCursor:
         if (self.lock != None):
             self.lock.release()
         return
+    
+class Log(object):
+    def __init__(self, client):
+        super(Log, self).__init__()
+        self.client = client
+
+    def login(self):
+        """Adds an entry for logon time of client."""
+        pass
+    
+
+    def logout(self):
+        """Updates logoff time on last logon entry."""
+        pass
+    
+    def live_on(self):
+        """Adds an entry on when client went live."""
+        pass
+    
+    def live_off(self):
+        """Updates end time of live entry"""
+        pass
+    
+    def metadata(self, metadata):
+        """Adds an entry for metadata."""
+        pass

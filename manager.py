@@ -1,4 +1,5 @@
 from threading import current_thread
+import threading
 import config
 import collections
 from jericho.buffer import Buffer
@@ -30,6 +31,8 @@ class IcyManager(object):
     def __init__(self):
         super(IcyManager, self).__init__()
         
+        #: Lock to acquire when fetching a context object.
+        self.context_lock = threading.RLock()
         self.context = {}
         
     def login(self, user=None, password=None):
@@ -53,24 +56,27 @@ class IcyManager(object):
     def register_source(self, client):
         """Register a connected icecast source to be used for streaming to
         the main server."""
-        try:
-            context = self.context[client.mount]
-        except KeyError:
-            context = IcyContext(client.mount)
-            self.context[client.mount] = context
-        context.append(client)
-        if not context.icecast.connected():
-            context.start_icecast()
+        with self.context_lock:
+            try:
+                context = self.context[client.mount]
+            except KeyError:
+                context = IcyContext(client.mount)
+                self.context[client.mount] = context
+        with context:
+            context.append(client)
+            if not context.icecast.connected():
+                context.start_icecast()
             
     def remove_source(self, client):
         """Removes a connected icecast source from the list of tracked
         sources to be used for streaming."""
-        try:
-            context = self.context[client.mount]
-        except KeyError:
-            # We can be sure there is no source when the mount is unknown
-            pass
-        else:
+        with self.context_lock:
+            try:
+                context = self.context[client.mount]
+            except KeyError:
+                # We can be sure there is no source when the mount is unknown
+                return
+        with context:
             try:
                 context.remove(client)
             except ValueError:
@@ -83,18 +89,22 @@ class IcyManager(object):
     def send_metadata(self, metadata, client):
         """Sends a metadata command to the underlying correct
         :class:`IcyContext`: class."""
-        if not client.mount in self.context:
+        try:
+            self.context[client.mount].send_metadata(metadata, client)
+        except KeyError:
             logger.info("Received metadata for non-existant mountpoint %s",
                         client.mount)
-            return
-        self.context[client.mount].send_metadata(metadata, client)
-        
+
+
 class IcyContext(object):
     """A class that is the context of a single icecast mountpoint."""
     def __init__(self, mount):
         super(IcyContext, self).__init__()
         #: Set to last value returned by :attr:`source`:
         self.current_source = None
+        
+        # Threading sync lock
+        self.lock = threading.RLock()
         
         # Create a buffer that always returns an empty string (EOF)
         self.eof_buffer = Buffer()
@@ -108,6 +118,12 @@ class IcyContext(object):
         self.icecast = icecast.Icecast(self, self.icecast_info)
         
         self.saved_metadata = {}
+        
+    def __enter__(self):
+        self.lock.acquire()
+        
+    def __exit__(self, type, value, traceback):
+        self.lock.release()
         
     def __repr__(self):
         return "IcyContext(mount={:s}, user count={:d})".format(
@@ -167,6 +183,7 @@ class IcyContext(object):
         """Calls the :class:`icecast.Icecast`: :meth:`icecast.Icecast.close`:
         method of this context."""
         self.icecast.close()
+        self.current_source = None
         
     def send_metadata(self, metadata, client):
         """Checks if client is the currently active source on this mountpoint
@@ -176,7 +193,7 @@ class IcyContext(object):
             source = self.sources[0]
         except IndexError:
             # No source, why are we even getting metadata ignore it
-            logger.warning("%s: Received metadata while we have none",
+            logger.warning("%s: Received metadata while we have no source.",
                            self.mount)
             return
         if (source.info.user == client.user):
