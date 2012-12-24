@@ -85,7 +85,39 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return (None, None)
         else:
             return login.decode("base64").split(":", 1)
-        
+    
+    def _serve_admin(self, url, query, user, password):
+        # admin is 4 and higher
+        is_admin = self.manager.login(user=user, password=password, privilege=3)
+        #disabled = u'disabled' if not is_admin else u''
+        disabled = u'disabled'
+        #TODO kicking. maybe.
+        send_buf = []
+        send_buf.append(server_header)
+        for mount in self.manager.context:
+            send_buf.append(mount_header.format(mount=mount))
+            for i, source in enumerate(self.manager.context[mount].sources):
+                metadata = self.manager.context[mount].saved_metadata.get(source, u'')                         
+                send_buf.append(client_html.format(user=source.info.user,
+                                               meta=metadata,
+                                               agent=source.info.useragent,
+                                               stream_name=source.info.stream_name,
+                                               mount=mount,
+                                               num=i,
+                                               disabled=disabled))
+            send_buf.append(u'</table>\n')
+        send_buf.append(u'</body>\n</html>\n')
+        send_buf = u"".join(send_buf)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", len(send_buf))
+            self.end_headers()
+            
+            self.wfile.write(send_buf)
+        except IOError as err:
+            logger.exception("Error in request handler")
+    
     def do_SOURCE(self):
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path # oh so simple
@@ -153,36 +185,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 # we can split it.
                 user, password = password.split('|')
             if parsed_url.path == "/proxy":
-                # admin is 4 and higher
-                is_admin = self.manager.login(user=user, password=password, privilege=3)
-                #disabled = u'disabled' if not is_admin else u''
-                disabled = u'disabled'
-                #TODO kicking. maybe.
-                
-                send_buf = server_header
-                for mount in self.manager.context:
-                    send_buf += mount_header.format(mount=mount)
-                    for i, source in enumerate(self.manager.context[mount].sources):
-                        metadata = self.manager.context[mount].saved_metadata.get(source, u'')                         
-                        send_buf += client_html.format(user=source.info.user,
-                                                       meta=metadata,
-                                                       agent=source.info.useragent,
-                                                       stream_name=source.info.stream_name,
-                                                       mount=mount,
-                                                       num=i,
-                                                       disabled=disabled)
-                    send_buf += u'</table>\n'
-                send_buf += u'</body>\n</html>\n'
-                
-                try:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html")
-                    self.send_header("Content-Length", len(send_buf))
-                    self.end_headers()
-                    
-                    self.wfile.write(send_buf)
-                except IOError as err:
-                    logger.exception("Error in request handler")
+                self._serve_admin(parsed_url, parsed_query, user, password)
             elif parsed_url.path == "/admin/metadata":
                 try:
                     mount = parsed_query['mount'][0]
