@@ -12,6 +12,7 @@ import config
 import urllib2
 import signal
 import collections
+from htmltemplate import HTMLTag
 
 
 socket.setdefaulttimeout(5.0)
@@ -21,19 +22,27 @@ logger = logging.getLogger('server')
 
 
 class IcyClient(object):
-    def __init__(self, buffer, mount, user=None, useragent=None):
+    def __init__(self, buffer, mount, user=None, useragent=None, stream_name=None):
         self.user = user
         self.useragent = useragent
         self.mount = mount
         self.buffer = buffer
+        self.stream_name = stream_name
         
     def __repr__(self):
-        return "IcyClient(mount={:s}, useragent={:s}, user={:s})".format(
+        return "IcyClient(mount={:s}, useragent={:s}, user={:s}, streamname={:s})".format(
                                                             self.mount,
                                                             self.useragent,
-                                                            self.user)
+                                                            self.user,
+                                                            self.stream_name)
 IcyClient = collections.namedtuple('IcyClient', 
-                                   ('buffer', 'mount', 'user', 'useragent'))
+                                   ('buffer', 'mount', 'user', 'useragent', 'stream_name'))
+
+basic_css = u"""
+table{border: 1px solid #999;border-right:0;border-bottom:0;margin-top:4px;}
+td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
+form{margin:0;padding:0;}
+"""
 
 
 class IcyRequestHandler(BaseHTTPRequestHandler):
@@ -45,10 +54,65 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return (None, None)
         else:
             return login.decode("base64").split(":", 1)
+    
+    def _serve_admin(self, url, query, user, password):
+        # admin is 4 and higher
+        is_admin = self.manager.login(user=user, password=password, privilege=3)
+        #disabled = u'disabled' if not is_admin else None
+        disabled = u'disabled'
+        #TODO kicking. maybe.
+        html = HTMLTag('html')
+        head = HTMLTag('head')
+        body = HTMLTag('body')
+        html.append(head)\
+            .append(body)
         
+        head.append(HTMLTag('title', 'Icecast Proxy'))\
+            .append(HTMLTag('style', basic_css, type='text/css'))
+        
+        body.append(HTMLTag('h3', 'Icecast Proxy'))
+        
+        for mount in self.manager.context:
+            table = HTMLTag('table', width='800px', cellspacing='0', cellpadding='2')
+            body.append(table)
+            # mount header
+            table.append(HTMLTag('tr').append(HTMLTag('th', mount, colspan='5', align='left')))
+            # subtitle header
+            tr_sh = HTMLTag('tr')\
+                 .append(HTMLTag('th', 'Username', width='80px'))\
+                 .append(HTMLTag('th', 'Metadata'))\
+                 .append(HTMLTag('th', 'Useragent', width='150px'))\
+                 .append(HTMLTag('th', 'Stream name', width='150px'))\
+                 .append(HTMLTag('th', 'Kick', width='50px'))
+            table.append(tr_sh)
+            for i, source in enumerate(self.manager.context[mount].sources):
+                metadata = self.manager.context[mount].saved_metadata.get(source, u'')
+                tr = HTMLTag('tr')\
+                    .append(HTMLTag('td', source.info.user))\
+                    .append(HTMLTag('td', metadata))\
+                    .append(HTMLTag('td', source.info.useragent))\
+                    .append(HTMLTag('td', source.info.stream_name))\
+                    .append(HTMLTag('td')\
+                        .append(HTMLTag('form', action='', method='GET')\
+                            .append(HTMLTag('input', type='hidden', name='mount', value=mount))\
+                            .append(HTMLTag('input', type='hidden', name='num', value=str(i)))\
+                            .append(HTMLTag('input', type='submit', value='Kick', disabled=disabled))))
+                table.append(tr)
+        send_buf = html.generate()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", len(send_buf))
+            self.end_headers()
+            
+            self.wfile.write(send_buf)
+        except IOError as err:
+            logger.exception("Error in request handler")
+    
     def do_SOURCE(self):
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path # oh so simple
+        self.stream_name = self.headers.get('ice-name', '<Unknown>')
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
             if user == 'source':
@@ -79,7 +143,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.icy_client = IcyClient(self.audio_buffer,
                                    self.mount,
                                    user=user,
-                                   useragent=self.useragent)
+                                   useragent=self.useragent,
+                                   stream_name=self.stream_name)
         self.manager.register_source(self.icy_client)
         try:
             while True:
@@ -110,13 +175,15 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 # No need to try; except because the self.login makes sure
                 # we can split it.
                 user, password = password.split('|')
-            if parsed_url.path == "/admin/metadata":
+            if parsed_url.path == "/proxy":
+                self._serve_admin(parsed_url, parsed_query, user, password)
+            elif parsed_url.path == "/admin/metadata":
                 try:
                     mount = parsed_query['mount'][0]
                 except KeyError, IndexError:
                     mount = ''
                 self.client = IcyClient(None, mount,
-                                        user, self.useragent)
+                                        user, self.useragent, None)
                 
                 song = parsed_query.get('song', None)
                 encoding = parsed_query.get('charset', 'latin1')

@@ -11,7 +11,7 @@ import bcrypt
 
 logger = logging.getLogger('server.manager')
 STuple = collections.namedtuple('STuple', ['buffer', 'info'])
-ITuple = collections.namedtuple('ITuple', ['user', 'useragent'])
+ITuple = collections.namedtuple('ITuple', ['user', 'useragent', 'stream_name'])
 
 
 def generate_info(mount):
@@ -35,7 +35,7 @@ class IcyManager(object):
         self.context_lock = threading.RLock()
         self.context = {}
         
-    def login(self, user=None, password=None):
+    def login(self, user=None, password=None, privilege=1):
         if user is None or password is None:
             return False
         if user == 'source':
@@ -45,8 +45,8 @@ class IcyManager(object):
                 return False
         with MySQLCursor() as cur:
             cur.execute(("SELECT * FROM users WHERE user=%s "
-                         "AND privileges>1 LIMIT 1;"),
-                        (user,))
+                         "AND privileges>%s LIMIT 1;"),
+                        (user, privilege))
             for row in cur:
                 hash = row['pass']
                 if bcrypt.hashpw(password, hash) == hash:
@@ -111,7 +111,7 @@ class IcyContext(object):
         self.eof_buffer.close()
         
         self.mount = mount
-        #: Deque of tuples of the format STuple(source, ITuple(user, useragent))
+        #: Deque of tuples of the format STuple(source, ITuple(user, useragent, stream_name))
         self.sources = collections.deque()
         
         self.icecast_info = generate_info(mount)
@@ -134,12 +134,12 @@ class IcyContext(object):
     def append(self, source):
         """Append a source client to the list of sources for this context."""
         self.sources.append(STuple(source.buffer,
-                                   ITuple(source.user, source.useragent)))
+                                   ITuple(source.user, source.useragent, source.stream_name)))
         
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""
         self.sources.remove(STuple(source.buffer,
-                                   ITuple(source.user, source.useragent)))
+                                   ITuple(source.user, source.useragent, source.stream_name)))
         
     @property
     def source(self):
@@ -193,12 +193,16 @@ class IcyContext(object):
             source = self.sources[0]
         except IndexError:
             # No source, why are we even getting metadata ignore it
+            # By Vin:
+            # Some clients send meta slightly before connecting; save the
+            # data for a second and attribute it to the next source?
             logger.warning("%s: Received metadata while we have no source.",
                            self.mount)
             return
         if (source.info.user == client.user):
             # Current source send metadata to us! yay
             logger.info("%s:metadata.update: %s", self.mount, metadata)
+            self.saved_metadata[source] = metadata
             self.icecast.set_metadata(metadata) # Lol consistent naming (not)
         else:
             for source in self.sources:
