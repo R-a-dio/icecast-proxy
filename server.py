@@ -21,20 +21,60 @@ logger = logging.getLogger('server')
 
 
 class IcyClient(object):
-    def __init__(self, buffer, mount, user=None, useragent=None):
+    def __init__(self, buffer, mount, user=None, useragent=None, stream_name=None):
         self.user = user
         self.useragent = useragent
         self.mount = mount
         self.buffer = buffer
+        self.stream_name = stream_name
         
     def __repr__(self):
-        return "IcyClient(mount={:s}, useragent={:s}, user={:s})".format(
+        return "IcyClient(mount={:s}, useragent={:s}, user={:s}, streamname={:s})".format(
                                                             self.mount,
                                                             self.useragent,
-                                                            self.user)
+                                                            self.user,
+                                                            self.stream_name)
 IcyClient = collections.namedtuple('IcyClient', 
-                                   ('buffer', 'mount', 'user', 'useragent'))
+                                   ('buffer', 'mount', 'user', 'useragent', 'stream_name'))
 
+server_header = u"""
+<html>\n<head>\n<title>Icecast Proxy</title>
+<style type="text/css">
+table{border: 1px solid #999;border-right:0;border-bottom:0;}
+td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
+form{margin:0;padding:0;}
+</style>\n</head>\n<body>
+<h3>Icecast Proxy</h3>
+
+"""
+
+mount_header = u"""
+<table width="800px" cellspacing="0" cellpadding="2">
+<tr>\n<td colspan="5"><b>{mount}</b></td>\n</tr>
+<tr>\n<td><b>Username</b></td>
+<td><b>Metadata</b></td>
+<td><b>Useragent</b></td>
+<td><b>Stream name</b></td>
+<td width="100px"><b>Kick</b></td>\n</tr>
+
+"""
+
+client_html = u"""
+<tr>
+<td>{user}</td>
+<td>{meta}</td>
+<td>{agent}</td>
+<td>{stream_name}</td>
+<td>
+<form action="" method="GET">
+<input type="hidden" name="mount" value="{mount}" />
+<input type="hidden" name="num" value="{num}" />
+<input type="submit" value="Kick" {disabled} />
+</form>
+</td>
+</tr>
+
+"""
 
 class IcyRequestHandler(BaseHTTPRequestHandler):
     manager = manager.IcyManager()
@@ -49,6 +89,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
     def do_SOURCE(self):
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path # oh so simple
+        self.stream_name = self.headers.get('icy-name', None)
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
             if user == 'source':
@@ -79,7 +120,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.icy_client = IcyClient(self.audio_buffer,
                                    self.mount,
                                    user=user,
-                                   useragent=self.useragent)
+                                   useragent=self.useragent,
+                                   stream_name=self.stream_name)
         self.manager.register_source(self.icy_client)
         try:
             while True:
@@ -110,7 +152,38 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 # No need to try; except because the self.login makes sure
                 # we can split it.
                 user, password = password.split('|')
-            if parsed_url.path == "/admin/metadata":
+            if parsed_url.path == "/proxy":
+                # admin is 4 and higher
+                is_admin = self.manager.login(user=user, password=password, privilege=3)
+                #disabled = u'disabled' if not is_admin else u''
+                disabled = u'disabled'
+                #TODO kicking. maybe.
+                
+                send_buf = server_header
+                for mount in self.manager.context:
+                    send_buf += mount_header.format(mount=mount)
+                    for i, source in enumerate(self.manager.context[mount].sources):
+                        metadata = self.manager.context[mount].saved_metadata.get(source, u'')                         
+                        send_buf += client_html.format(user=source.info.user,
+                                                       meta=metadata,
+                                                       agent=source.info.useragent,
+                                                       stream_name=source.info.stream_name,
+                                                       mount=mount,
+                                                       num=i,
+                                                       disabled=disabled)
+                    send_buf += u'</table>\n'
+                send_buf += u'</body>\n</html>\n'
+                
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html")
+                    self.send_header("Content-Length", len(send_buf))
+                    self.end_headers()
+                    
+                    self.wfile.write(send_buf)
+                except IOError as err:
+                    logger.exception("Error in request handler")
+            elif parsed_url.path == "/admin/metadata":
                 try:
                     mount = parsed_query['mount'][0]
                 except KeyError, IndexError:
