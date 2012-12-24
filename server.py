@@ -112,7 +112,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
     def do_SOURCE(self):
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path # oh so simple
-        self.stream_name = self.headers.get('icy-name', None)
+        self.stream_name = self.headers.get('ice-name', '<Unknown>')
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
             if user == 'source':
@@ -183,7 +183,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 except KeyError, IndexError:
                     mount = ''
                 self.client = IcyClient(None, mount,
-                                        user, self.useragent)
+                                        user, self.useragent, None)
                 
                 song = parsed_query.get('song', None)
                 encoding = parsed_query.get('charset', 'latin1')
