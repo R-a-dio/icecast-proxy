@@ -186,8 +186,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                                         user, self.useragent)
                 
                 song = parsed_query.get('song', None)
+                encoding = parsed_query.get('charset', 'latin1')
                 if not song is None:
-                    metadata = fix_encoding(song[0])
+                    metadata = fix_encoding(song[0], encoding[0])
                     self.manager.send_metadata(metadata=metadata, client=self.client)
                 
                 # Send a response... although most clients just ignore this.
@@ -250,15 +251,32 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         pass
 
 
-def fix_encoding(metadata):
-    try:
-        try:
-            return unicode(metadata, 'utf-8', 'strict').strip()
-        except (UnicodeDecodeError):
-            return unicode(metadata, 'shiftjis', 'replace').strip()
-    except (TypeError):
-        return metadata.strip()
+def fix_encoding(metadata, encoding):
+    """We get passed a byte string and an encoding and have to figure
+    out what to do with it in regards to 'fixing' it.
     
+    when the encoding = latin1 we can safely assume the client send no
+    explicit encoding and we apply the old ugly fix.
+    
+    when the encoding is anything but latin1 we can safely know the client send
+    an explicit encoding and we decode it properly.
+    """
+    if encoding == 'latin1':
+        try:
+            try:
+                return unicode(metadata, 'utf-8', 'strict').strip()
+            except (UnicodeDecodeError):
+                return unicode(metadata, 'shiftjis', 'replace').strip()
+        except (TypeError):
+            return metadata.strip()
+    else:
+        try:
+            return unicode(metadata, encoding).strip()
+        except (UnicodeDecodeError):
+            # The encoding we got explicitely seems to be wrong
+            # We call ourself again with latin1 encoding
+            return fix_encoding(metadata, 'latin1')
+        
         
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     timeout = 0.5
