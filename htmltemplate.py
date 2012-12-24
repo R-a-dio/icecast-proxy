@@ -40,7 +40,7 @@ class HTMLTag(object):
         
         
 basic_css = u"""
-table{border: 1px solid #999;border-right:0;border-bottom:0;}
+table{border: 1px solid #999;border-right:0;border-bottom:0;margin-top:4px;}
 td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
 form{margin:0;padding:0;}
 """
@@ -101,14 +101,14 @@ def test():
         table = HTMLTag('table', width='800px', cellspacing='0', cellpadding='2')
         body.append(table)
         # mount header
-        table.append(HTMLTag('tr').append(HTMLTag('td', colspan='5').append(HTMLTag('b', mount))))
+        table.append(HTMLTag('tr').append(HTMLTag('th', mount, colspan='5', align='left')))
         # subtitle header
         tr_sh = HTMLTag('tr')\
-             .append(HTMLTag('td').append(HTMLTag('b', 'Username')))\
-             .append(HTMLTag('td').append(HTMLTag('b', 'Metadata')))\
-             .append(HTMLTag('td').append(HTMLTag('b', 'Useragent')))\
-             .append(HTMLTag('td').append(HTMLTag('b', 'Stream name')))\
-             .append(HTMLTag('td', width='100px').append(HTMLTag('b', 'Kick')))
+             .append(HTMLTag('th', 'Username', width='80px'))\
+             .append(HTMLTag('th', 'Metadata'))\
+             .append(HTMLTag('th', 'Useragent', width='150px'))\
+             .append(HTMLTag('th', 'Stream name', width='150px'))\
+             .append(HTMLTag('th', 'Kick', width='50px'))
         table.append(tr_sh)
         for i, source in enumerate(context[mount].sources):
             metadata = context[mount].saved_metadata.get(source, u'')
