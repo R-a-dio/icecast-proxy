@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import cgi
+from cgi import escape as esc
 
 class HTMLTag(object):
     base_string =        "<{tag} {attr}>{content}</{tag}>\n"
@@ -45,6 +46,45 @@ td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5
 form{margin:0;padding:0;}
 """
 
+server_header = u"""
+<html>\n<head>\n<title>Icecast Proxy</title>
+<style type="text/css">
+table{border: 1px solid #999;border-right:0;border-bottom:0;margin-top:4px;}
+td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
+form{margin:0;padding:0;}
+</style>\n</head>\n<body>
+<h3>Icecast Proxy</h3>
+
+"""
+
+mount_header = u"""
+<table width="800px" cellspacing="0" cellpadding="2">
+<tr>\n<th align="left" colspan="5">{mount}</th>\n</tr>
+<tr>\n<th width="80px">Username</th>
+<th>Metadata</th>
+<th width="150px">Useragent</th>
+<th width="150px">Stream name</th>
+<th width="50px">Kick</th>\n</tr>
+
+"""
+
+client_html = u"""
+<tr>
+<td>{user}</td>
+<td>{meta}</td>
+<td>{agent}</td>
+<td>{stream_name}</td>
+<td>
+<form action="" method="GET">
+<input type="hidden" name="mount" value="{mount}" />
+<input type="hidden" name="num" value="{num}" />
+<input type="submit" value="Kick" {disabled} />
+</form>
+</td>
+</tr>
+
+"""
+
 def test():
     
     class Data(object):
@@ -68,6 +108,7 @@ def test():
     
     main = TestContext()
     test = TestContext()
+    empt = TestContext()
     
     kuma = Data(IcyClient(None, '/main.mp3', 'kumakun', 'BASS/2.2.1', 'Kuma\'s Friday Stream'))
     skye = Data(IcyClient(None, '/main.mp3', 'skye', 'WinAmpMPEG/3.2 System', 'Skyejack'))
@@ -75,7 +116,7 @@ def test():
     main.sources.append(kuma)
     main.sources.append(skye)
     main.saved_metadata[kuma] = u'yana - \u30aa\u30ba\u30cd\u30a4\u30fb\u30cf\u30de\u30f3\u306f\u3082\u3046\u3044\u3089\u306a\u3044'
-    main.saved_metadata[skye] = u'Fukkireta'
+    main.saved_metadata[skye] = u'Fukkireta & helping? <lel>'
     
     vin = Data(IcyClient(None, '/test.mp3', 'Vin', 'Stemekdk', 'Vin\'s Stream'))
     
@@ -84,47 +125,30 @@ def test():
     
     context['/main.mp3'] = main
     context['/test.mp3'] = test
+    context['/empty.mp3'] = empt
     
     
-    html = HTMLTag('html')
-    head = HTMLTag('head')
-    body = HTMLTag('body')
-    html.append(head)\
-        .append(body)
-    
-    head.append(HTMLTag('title', 'Icecast Proxy'))\
-        .append(HTMLTag('style', basic_css, type='text/css'))
-    
-    body.append(HTMLTag('h3', 'Icecast Proxy'))
+    send_buf = []
+    send_buf.append(server_header)
     
     for mount in context:
-        table = HTMLTag('table', width='800px', cellspacing='0', cellpadding='2')
-        body.append(table)
-        # mount header
-        table.append(HTMLTag('tr').append(HTMLTag('th', mount, colspan='5', align='left')))
-        # subtitle header
-        tr_sh = HTMLTag('tr')\
-             .append(HTMLTag('th', 'Username', width='80px'))\
-             .append(HTMLTag('th', 'Metadata'))\
-             .append(HTMLTag('th', 'Useragent', width='150px'))\
-             .append(HTMLTag('th', 'Stream name', width='150px'))\
-             .append(HTMLTag('th', 'Kick', width='50px'))
-        table.append(tr_sh)
-        for i, source in enumerate(context[mount].sources):
-            metadata = context[mount].saved_metadata.get(source, u'')
-            tr = HTMLTag('tr')\
-                .append(HTMLTag('td', source.info.user))\
-                .append(HTMLTag('td', metadata))\
-                .append(HTMLTag('td', source.info.useragent))\
-                .append(HTMLTag('td', source.info.stream_name))\
-                .append(HTMLTag('td')\
-                    .append(HTMLTag('form', action='', method='GET')\
-                        .append(HTMLTag('input', type='hidden', name='mount', value=mount))\
-                        .append(HTMLTag('input', type='hidden', name='num', value=str(i)))\
-                        .append(HTMLTag('input', type='submit', value='Kick', disabled='disabled'))))
-            table.append(tr)
-            
+        if context[mount].sources: # only include if there is a source on there
+            send_buf.append(mount_header.format(mount=esc(mount)))
+            for i, source in enumerate(context[mount].sources):
+                metadata = context[mount].saved_metadata.get(source, u'')
+                send_buf.append(client_html.format(\
+                    user=esc(source.info.user),
+                    meta=esc(metadata),
+                    agent=esc(source.info.useragent),
+                    stream_name=esc(source.info.stream_name),
+                    mount=esc(mount, True),
+                    num=i,
+                    disabled='disabled'))
+            send_buf.append('</table>\n')
+    send_buf.append('</body>\n</html>')
+    send_buf = u''.join(send_buf)
+    send_buf = send_buf.encode('utf-8', 'replace')
     
     
     f = open('abc.html', 'w')
-    f.write(html.generate())
+    f.write(send_buf)
