@@ -313,6 +313,25 @@ def close():
     _server_thread.join(10.0)
 
 if __name__ == "__main__":
+    # Setup logging
+    stream = logging.StreamHandler()
+    logfile = logging.FileHandler(os.path.expanduser('~/logs/proxy.log'),
+                                  encoding='utf-8')
+    
+    formatter = logging.Formatter(
+                      '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                      )
+    
+    # Add the formatters for timestamps
+    stream.setFormatter(formatter)
+    logfile.setFormatter(formatter)
+    
+    # And add the handlers to your logger
+    logger.addHandler(stream)
+    logger.addHandler(logfile)
+    
+    logger.setLevel(config.logging_level)
+    
     import time
     killed = threading.Event()
     def signal_handler(signum, frame):

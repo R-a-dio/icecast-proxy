@@ -133,14 +133,31 @@ class IcyContext(object):
         
     def append(self, source):
         """Append a source client to the list of sources for this context."""
-        self.sources.append(STuple(source.buffer,
-                                   ITuple(source.user, source.useragent, source.stream_name)))
+        source_tuple = STuple(source.buffer, ITuple(source.user,
+                                                    source.useragent,
+                                                    source.stream_name))
+        logging.debug("Adding source '{source:s}' from '{context:s}'".format(
+                                           source=repr(source_tuple),
+                                           context=repr(context),
+                                           ))
+        self.sources.append()
+        logging.debug("Current sources are '{sources:s}'.".format(
+                                              sources=repr(self.sources))
+                                              )
         
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""
-        self.sources.remove(STuple(source.buffer,
-                                   ITuple(source.user, source.useragent, source.stream_name)))
-        
+        source_tuple = STuple(source.buffer, ITuple(source.user, 
+                                                    source.useragent,
+                                                    source.stream_name))
+        logging.debug("Removing source '{source:s}' from '{context:s}'".format(
+                                           source=repr(source_tuple),
+                                           context=repr(context),
+                                           ))
+        self.sources.remove(source_tuple)
+        logging.debug("Current sources are '{sources:s}'.".format(
+                                              sources=repr(self.sources))
+                                              )
     @property
     def source(self):
         """Returns the first source in the :attr:`sources`: deque.
@@ -150,6 +167,7 @@ class IcyContext(object):
         try:
             source = self.sources[0]
         except IndexError:
+            logging.debug("Returning EOF in source acquiring.")
             return self.eof_buffer
         else:
             if not self.current_source is source:
