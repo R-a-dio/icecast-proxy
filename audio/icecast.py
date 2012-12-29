@@ -20,6 +20,7 @@ class Icecast(object):
         """Connect the libshout object to the configured server."""
         try:
             self._shout.open()
+            logger.info("Connected to Icecast on "+self.config['mount'])
         except (pylibshout.ShoutException) as err:
             logger.exception("Failed to connect to Icecast server.")
             raise IcecastError("Failed to connect to icecast server.")
@@ -44,6 +45,7 @@ class Icecast(object):
         self._should_run.set()
         try:
             self._shout.close()
+            logger.info("Disconnected from Icecast on "+self.config['mount'])
         except (pylibshout.ShoutException) as err:
             if err[0] == pylibshout.SHOUTERR_UNCONNECTED:
                 pass
