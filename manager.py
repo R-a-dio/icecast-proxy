@@ -136,12 +136,12 @@ class IcyContext(object):
         source_tuple = STuple(source.buffer, ITuple(source.user,
                                                     source.useragent,
                                                     source.stream_name))
-        logging.debug("Adding source '{source:s}' from '{context:s}'".format(
+        logger.debug("Adding source '{source:s}' from '{context:s}'".format(
                                            source=repr(source_tuple),
-                                           context=repr(context),
+                                           context=repr(self),
                                            ))
-        self.sources.append()
-        logging.debug("Current sources are '{sources:s}'.".format(
+        self.sources.append(source_tuple)
+        logger.debug("Current sources are '{sources:s}'.".format(
                                               sources=repr(self.sources))
                                               )
         
@@ -150,12 +150,12 @@ class IcyContext(object):
         source_tuple = STuple(source.buffer, ITuple(source.user, 
                                                     source.useragent,
                                                     source.stream_name))
-        logging.debug("Removing source '{source:s}' from '{context:s}'".format(
+        logger.debug("Removing source '{source:s}' from '{context:s}'".format(
                                            source=repr(source_tuple),
-                                           context=repr(context),
+                                           context=repr(self),
                                            ))
         self.sources.remove(source_tuple)
-        logging.debug("Current sources are '{sources:s}'.".format(
+        logger.debug("Current sources are '{sources:s}'.".format(
                                               sources=repr(self.sources))
                                               )
     @property
@@ -167,7 +167,7 @@ class IcyContext(object):
         try:
             source = self.sources[0]
         except IndexError:
-            logging.debug("Returning EOF in source acquiring.")
+            logger.debug("Returning EOF in source acquiring.")
             return self.eof_buffer
         else:
             if not self.current_source is source:

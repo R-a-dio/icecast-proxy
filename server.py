@@ -319,7 +319,7 @@ if __name__ == "__main__":
                                   encoding='utf-8')
     
     formatter = logging.Formatter(
-                      '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                      '%(asctime)s:%(name)s:%(levelname)s: %(message)s'
                       )
     
     # Add the formatters for timestamps
