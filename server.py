@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import socket
+import os
 from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
 import urlparse
@@ -28,14 +29,14 @@ class IcyClient(object):
         self.mount = mount
         self.buffer = buffer
         self.stream_name = stream_name
-        
+
     def __repr__(self):
         return "IcyClient(mount={:s}, useragent={:s}, user={:s}, streamname={:s})".format(
                                                             self.mount,
                                                             self.useragent,
                                                             self.user,
                                                             self.stream_name)
-IcyClient = collections.namedtuple('IcyClient', 
+IcyClient = collections.namedtuple('IcyClient',
                                    ('buffer', 'mount', 'user', 'useragent', 'stream_name'))
 
 basic_css = u"""
@@ -54,24 +55,24 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return (None, None)
         else:
             return login.decode("base64").split(":", 1)
-    
+
     def _serve_admin(self, url, query, user, password):
         # admin is 4 and higher
         is_admin = self.manager.login(user=user, password=password, privilege=3)
-        #disabled = u'disabled' if not is_admin else None
+        # disabled = u'disabled' if not is_admin else None
         disabled = u'disabled'
-        #TODO kicking. maybe.
+        # TODO kicking. maybe.
         html = HTMLTag('html')
         head = HTMLTag('head')
         body = HTMLTag('body')
         html.append(head)\
             .append(body)
-        
+
         head.append(HTMLTag('title', 'Icecast Proxy'))\
             .append(HTMLTag('style', basic_css, type='text/css'))
-        
+
         body.append(HTMLTag('h3', 'Icecast Proxy'))
-        
+
         for mount in self.manager.context:
             table = HTMLTag('table', width='800px', cellspacing='0', cellpadding='2')
             body.append(table)
@@ -104,14 +105,14 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", len(send_buf))
             self.end_headers()
-            
+
             self.wfile.write(send_buf)
         except IOError as err:
             logger.exception("Error in request handler")
-    
+
     def do_SOURCE(self):
         self.useragent = self.headers.get('User-Agent', None)
-        self.mount = self.path # oh so simple
+        self.mount = self.path  # oh so simple
         self.stream_name = self.headers.get('ice-name', '<Unknown>')
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
@@ -132,7 +133,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     logger.info("source: Failed login, no separator found "
                                 "from %s.", str(self.client_address))
                 else:
-                    logger.info("source: User '%s' failed to login from %s.", 
+                    logger.info("source: User '%s' failed to login from %s.",
                                 user, str(self.client_address))
             self.send_response(401)
             self.end_headers()
@@ -155,7 +156,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         finally:
             logger.info("source: User '%s' logged off.", user)
             self.manager.remove_source(self.icy_client)
-        
+
     def do_GET(self):
         self.useragent = self.headers.get('User-Agent', None)
         parsed_url = urlparse.urlparse(self.path)
@@ -184,20 +185,20 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     mount = ''
                 self.client = IcyClient(None, mount,
                                         user, self.useragent, None)
-                
+
                 song = parsed_query.get('song', None)
                 encoding = parsed_query.get('charset', ['latin1'])
                 if not song is None:
                     metadata = fix_encoding(song[0], encoding[0])
                     self.manager.send_metadata(metadata=metadata, client=self.client)
-                
+
                 # Send a response... although most clients just ignore this.
                 try:
                     self.send_response(200)
                     self.send_header("Content-Type", "text/xml")
                     self.send_header("Content-Length", "113")
                     self.end_headers()
-        
+
                     self.wfile.write('<?xml version="1.0"?>\n<iceresponse><message>Metadata update successful</message><return>1</return></iceresponse>')
                 except IOError as err:
                     if hasattr(err, 'errno') and err.errno == 32:
@@ -213,11 +214,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                                         )
                 url = url[:2] + parsed_url[2:]
                 url = urlparse.urlunparse(url)
-                
+
                 request = urllib2.Request(url)
                 request.add_header('User-Agent', self.useragent)
                 request.add_header('Authorization', 'Basic {:s}'.format(auth))
-                
+
                 try:
                     result = urllib2.urlopen(request).read()
                 except urllib2.HTTPError as err:
@@ -228,24 +229,24 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     self.send_reponse(501)
                     self.end_headers()
                     return
-                
+
                 result_length = len(result)
-                
+
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/xml')
                 self.send_header('Content-Length', str(result_length))
                 self.end_headers()
-                
+
                 self.wfile.write(result)
         else:
             self.send_response(401)
             self.send_header('WWW-Authenticate', 'Basic realm="Icecast2 Proxy"')
             self.end_headers()
-            #return
-            
+            # return
+
     def login(self, user=None, password=None):
         return self.manager.login(user, password)
-    
+
     def log_message(self, *args, **kwargs):
         """Disable logging, we don't need it"""
         pass
@@ -276,8 +277,8 @@ def fix_encoding(metadata, encoding):
             # The encoding we got explicitely seems to be wrong
             # We call ourself again with latin1 encoding
             return fix_encoding(metadata, 'latin1')
-        
-        
+
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     timeout = 0.5
     def finish_request(self, request, client_address):
@@ -298,8 +299,8 @@ def run(server=ThreadedHTTPServer,
     while not continue_running.is_set():
         icy.handle_request()
     icy.shutdown()
-    
-    
+
+
 def start():
     global _server_event, _server_thread
     _server_event = threading.Event()
@@ -307,7 +308,7 @@ def start():
                                                           _server_event})
     _server_thread.daemon = True
     _server_thread.start()
-    
+
 def close():
     _server_event.set()
     _server_thread.join(10.0)
@@ -317,21 +318,27 @@ if __name__ == "__main__":
     stream = logging.StreamHandler()
     logfile = logging.FileHandler(os.path.expanduser('~/logs/proxy.log'),
                                   encoding='utf-8')
-    
+
     formatter = logging.Formatter(
                       '%(asctime)s:%(name)s:%(levelname)s: %(message)s'
                       )
-    
+
     # Add the formatters for timestamps
     stream.setFormatter(formatter)
     logfile.setFormatter(formatter)
-    
+
     # And add the handlers to your logger
     logger.addHandler(stream)
     logger.addHandler(logfile)
-    
+
     logger.setLevel(config.logging_level)
-    
+
+    # Don't forget the audio package logger
+    audio_log = logger.getLogger('audio')
+    audio_log.addHandler(stream)
+    audio_log.addHandler(logfile)
+    audio_log.setLevel(config.logging_level)
+
     import time
     killed = threading.Event()
     def signal_handler(signum, frame):
@@ -342,4 +349,4 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
     while not killed.is_set():
         time.sleep(5)
-    
+
