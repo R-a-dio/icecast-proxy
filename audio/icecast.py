@@ -13,18 +13,18 @@ class Icecast(object):
         self.config = (config if isinstance(config, IcecastConfig)
                        else IcecastConfig(config))
         self.source = source
-        
+
         self._shout = self.setup_libshout()
-    
+
     def connect(self):
         """Connect the libshout object to the configured server."""
         try:
             self._shout.open()
-            logger.info("Connected to Icecast on "+self.config['mount'])
+            logger.info("Connected to Icecast on " + self.config['mount'])
         except (pylibshout.ShoutException) as err:
             logger.exception("Failed to connect to Icecast server.")
             raise IcecastError("Failed to connect to icecast server.")
-            
+
     def connected(self):
         """Returns True if the libshout object is currently connected to
         an icecast server."""
@@ -32,20 +32,20 @@ class Icecast(object):
             return True if self._shout.connected() == -7 else False
         except AttributeError:
             return False
-        
+
     def read(self, size, timeout=None):
         raise NotImplementedError("Icecast does not support reading.")
-    
+
     def nonblocking(self, state):
         pass
-        
+
     def close(self):
         """Closes the libshout object and tries to join the thread if we are
         not calling this from our own thread."""
         self._should_run.set()
         try:
             self._shout.close()
-            logger.info("Disconnected from Icecast on "+self.config['mount'])
+            logger.info("Disconnected from Icecast on " + self.config['mount'])
         except (pylibshout.ShoutException) as err:
             if err[0] == pylibshout.SHOUTERR_UNCONNECTED:
                 pass
@@ -56,15 +56,15 @@ class Icecast(object):
             self._thread.join(5.0)
         except (RuntimeError) as err:
             pass
-        
+
     def run(self):
         while not self._should_run.is_set():
             while self.connected():
                 if hasattr(self, '_saved_meta'):
                     self.set_metadata(self._saved_meta)
                     del self._saved_meta
-                    
-                buff = self.source.read(4096)
+
+                buff = self.source.read(8192)
                 if not buff:
                     # EOF
                     self.close()
@@ -76,39 +76,39 @@ class Icecast(object):
                 except (pylibshout.ShoutException) as err:
                     logger.exception("Failed sending stream data.")
                     self.reboot_libshout()
-                    
+
             if not self._should_run.is_set():
                 time.sleep(self.connecting_timeout)
                 self.reboot_libshout()
-                
+
     def start(self):
         """Starts the thread that reads from source and feeds it to icecast."""
         if not self.connected():
             self.connect()
         self._should_run = threading.Event()
-        
+
         self._thread = threading.Thread(target=self.run)
         self._thread.name = "Icecast"
         self._thread.daemon = True
         self._thread.start()
-            
+
     def switch_source(self, new_source):
         """Tries to change the source without disconnect from icecast."""
-        self._should_run.set() # Gracefully try to get rid of the thread
+        self._should_run.set()  # Gracefully try to get rid of the thread
         try:
             self._thread.join(5.0)
         except RuntimeError as err:
             logger.exception("Got called from my own thread.")
-        self.source = new_source # Swap out our source
-        self.start() # Start a new thread (so roundabout)
-        
+        self.source = new_source  # Swap out our source
+        self.start()  # Start a new thread (so roundabout)
+
     def set_metadata(self, metadata):
         try:
-            self._shout.metadata = {'song': metadata} # Stupid library
+            self._shout.metadata = {'song': metadata}  # Stupid library
         except (pylibshout.ShoutException) as err:
             logger.exception("Failed sending metadata. No action taken.")
             self._saved_meta = metadata
-            
+
     def setup_libshout(self):
         """Internal method
         
@@ -117,7 +117,7 @@ class Icecast(object):
         shout = pylibshout.Shout(tag_fix=False)
         self.config.setup(shout)
         return shout
-        
+
     def reboot_libshout(self):
         """Internal method
         
@@ -132,14 +132,14 @@ class Icecast(object):
             self.connect()
         except (IcecastError) as err:
             logger.exception("Connection failure.")
-            
+
 class IcecastConfig(dict):
     """Simple dict subclass that knows how to apply the keys to a
     libshout object.
     """
     def __init__(self, attributes=None):
         super(IcecastConfig, self).__init__(attributes or {})
-        
+
     def setup(self, shout):
         """Setup 'shout' configuration by setting attributes on the object.
         
@@ -151,7 +151,7 @@ class IcecastConfig(dict):
             except pylibshout.ShoutException as err:
                 raise IcecastError(("Incorrect configuration option '{:s}' or "
                                    " value '{:s}' used.").format(key, value))
-                
-                
+
+
 class IcecastError(Exception):
     pass

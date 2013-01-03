@@ -101,7 +101,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         send_buf.append(server_header)
 
         for mount in self.manager.context:
-            if self.manager.context[mount].sources: # only include if there is a source on there
+            if self.manager.context[mount].sources:  # only include if there is a source on there
                 send_buf.append(mount_header.format(mount=esc(mount)))
                 for i, source in enumerate(self.manager.context[mount].sources):
                     metadata = self.manager.context[mount].saved_metadata.get(source, u'')
@@ -166,7 +166,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.manager.register_source(self.icy_client)
         try:
             while True:
-                data = self.rfile.read(1024)
+                data = self.rfile.read(4096)
                 if data == '':
                     break
                 self.audio_buffer.write(data)
