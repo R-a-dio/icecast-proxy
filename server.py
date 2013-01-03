@@ -14,6 +14,7 @@ import urllib2
 import signal
 import collections
 from htmltemplate import HTMLTag
+from cgi import escape as esc
 
 
 socket.setdefaulttimeout(5.0)
@@ -39,10 +40,44 @@ class IcyClient(object):
 IcyClient = collections.namedtuple('IcyClient',
                                    ('buffer', 'mount', 'user', 'useragent', 'stream_name'))
 
-basic_css = u"""
+
+server_header = u"""
+<html>\n<head>\n<title>Icecast Proxy</title>
+<style type="text/css">
 table{border: 1px solid #999;border-right:0;border-bottom:0;margin-top:4px;}
 td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
 form{margin:0;padding:0;}
+</style>\n</head>\n<body>
+<h3>Icecast Proxy</h3>
+
+"""
+
+mount_header = u"""
+<table width="800px" cellspacing="0" cellpadding="2">
+<tr>\n<th align="left" colspan="5">{mount}</th>\n</tr>
+<tr>\n<th width="80px">Username</th>
+<th>Metadata</th>
+<th width="150px">Useragent</th>
+<th width="150px">Stream name</th>
+<th width="50px">Kick</th>\n</tr>
+
+"""
+
+client_html = u"""
+<tr>
+<td>{user}</td>
+<td>{meta}</td>
+<td>{agent}</td>
+<td>{stream_name}</td>
+<td>
+<form action="" method="GET">
+<input type="hidden" name="mount" value="{mount}" />
+<input type="hidden" name="num" value="{num}" />
+<input type="submit" value="Kick" {disabled} />
+</form>
+</td>
+</tr>
+
 """
 
 
@@ -62,44 +97,26 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         # disabled = u'disabled' if not is_admin else None
         disabled = u'disabled'
         # TODO kicking. maybe.
-        html = HTMLTag('html')
-        head = HTMLTag('head')
-        body = HTMLTag('body')
-        html.append(head)\
-            .append(body)
-
-        head.append(HTMLTag('title', 'Icecast Proxy'))\
-            .append(HTMLTag('style', basic_css, type='text/css'))
-
-        body.append(HTMLTag('h3', 'Icecast Proxy'))
+        send_buf = []
+        send_buf.append(server_header)
 
         for mount in self.manager.context:
-            table = HTMLTag('table', width='800px', cellspacing='0', cellpadding='2')
-            body.append(table)
-            # mount header
-            table.append(HTMLTag('tr').append(HTMLTag('th', mount, colspan='5', align='left')))
-            # subtitle header
-            tr_sh = HTMLTag('tr')\
-                 .append(HTMLTag('th', 'Username', width='80px'))\
-                 .append(HTMLTag('th', 'Metadata'))\
-                 .append(HTMLTag('th', 'Useragent', width='150px'))\
-                 .append(HTMLTag('th', 'Stream name', width='150px'))\
-                 .append(HTMLTag('th', 'Kick', width='50px'))
-            table.append(tr_sh)
-            for i, source in enumerate(self.manager.context[mount].sources):
-                metadata = self.manager.context[mount].saved_metadata.get(source, u'')
-                tr = HTMLTag('tr')\
-                    .append(HTMLTag('td', source.info.user))\
-                    .append(HTMLTag('td', metadata))\
-                    .append(HTMLTag('td', source.info.useragent))\
-                    .append(HTMLTag('td', source.info.stream_name))\
-                    .append(HTMLTag('td')\
-                        .append(HTMLTag('form', action='', method='GET')\
-                            .append(HTMLTag('input', type='hidden', name='mount', value=mount))\
-                            .append(HTMLTag('input', type='hidden', name='num', value=str(i)))\
-                            .append(HTMLTag('input', type='submit', value='Kick', disabled=disabled))))
-                table.append(tr)
-        send_buf = html.generate()
+            if self.manager.context[mount].sources: # only include if there is a source on there
+                send_buf.append(mount_header.format(mount=esc(mount)))
+                for i, source in enumerate(self.manager.context[mount].sources):
+                    metadata = self.manager.context[mount].saved_metadata.get(source, u'')
+                    send_buf.append(client_html.format(\
+                        user=esc(source.info.user),
+                        meta=esc(metadata),
+                        agent=esc(source.info.useragent),
+                        stream_name=esc(source.info.stream_name),
+                        mount=esc(mount, True),
+                        num=i,
+                        disabled=disabled))
+                send_buf.append('</table>\n')
+        send_buf.append('</body>\n</html>')
+        send_buf = u''.join(send_buf)
+        send_buf = send_buf.encode('utf-8', 'replace')
         try:
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
