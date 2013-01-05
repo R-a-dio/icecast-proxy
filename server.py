@@ -351,7 +351,7 @@ if __name__ == "__main__":
     logger.setLevel(config.logging_level)
 
     # Don't forget the audio package logger
-    audio_log = logger.getLogger('audio')
+    audio_log = logging.getLogger('audio')
     audio_log.addHandler(stream)
     audio_log.addHandler(logfile)
     audio_log.setLevel(config.logging_level)
