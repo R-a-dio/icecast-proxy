@@ -1,20 +1,18 @@
 #!/usr/bin/python
-
 import socket
 import os
-from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
-from SocketServer import ThreadingMixIn, BaseServer
 import urlparse
 import logging
 import manager
 import threading
-from jericho.buffer import Buffer
 import config
 import urllib2
 import signal
 import collections
-from htmltemplate import HTMLTag
 from cgi import escape as esc
+from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
+from SocketServer import ThreadingMixIn, BaseServer
+from buffers import Buffer
 
 
 socket.setdefaulttimeout(5.0)
