@@ -68,7 +68,7 @@ class Icecast(object):
                 if not buff:
                     # EOF
                     self.close()
-                    logger.exception("Source EOF, closing ourself.")
+                    logger.error("Source EOF, closing ourself.")
                     break
                 try:
                     self._shout.send(buff)
