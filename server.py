@@ -16,8 +16,8 @@ from buffers import Buffer
 
 
 socket.setdefaulttimeout(5.0)
-MAX_BUFFER = 10488
-MAX_DEQUES = 4
+MAX_BUFFER = 24*1024*4 # Go about 192kbps (24kB/s) times two for a 2 second buffer
+#MAX_DEQUES = 4
 logger = logging.getLogger('server')
 
 
@@ -154,8 +154,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        self.audio_buffer = Buffer(max_size=MAX_BUFFER,
-                                 deques=MAX_DEQUES)
+        self.audio_buffer = Buffer(max_size=MAX_BUFFER)
         self.icy_client = IcyClient(self.audio_buffer,
                                    self.mount,
                                    user=user,

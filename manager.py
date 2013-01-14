@@ -106,7 +106,7 @@ class IcyContext(object):
         self.lock = threading.RLock()
 
         # Create a buffer that always returns an empty string (EOF)
-        self.eof_buffer = Buffer()
+        self.eof_buffer = Buffer(1)
         self.eof_buffer.close()
 
         self.mount = mount
@@ -163,9 +163,9 @@ class IcyContext(object):
 
     @property
     def source(self):
-        """Returns the first source in the :attr:`sources`: deque.
+        """Returns the first source in the :attr:`sources` deque.
         
-        If :attr:`sources`: is empty it returns :attr:`eof_buffer`: instead
+        If :attr:`sources` is empty it returns :const:`None` instead
         """
         try:
             source = self.sources[0]
@@ -194,12 +194,25 @@ class IcyContext(object):
         
         :obj:`timeout`: is unused in this implementation."""
 
-        while self.source:
-            data = self.source.read(size)
-            if data == '':
+        # Acquire source once, then use that one return everywhere else.
+        # Classic example of not-being-thread-safe in the old method.
+        source = self.source
+        while source is not None:
+            # Read data from the returned buffer
+            data = source.read(size)
+            # Refresh our source variable to point to the top source
+            source = self.source
+
+            if data == b'':
+                # If we got an EOF from the read it means we should check if
+                # there is another source available and continue the loop.
                 continue
-            return data
-        return ''
+            else:
+                # Else we can just return the data we found from the source.
+                return data
+        # If we got here it means `self.source` returned None and we have no
+        # more sources left to read from. So we can return an EOF.
+        return b''
 
     def start_icecast(self):
         """Calls the :class:`icecast.Icecast`: :meth:`icecast.Icecast.start`:
