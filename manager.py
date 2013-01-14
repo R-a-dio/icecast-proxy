@@ -197,7 +197,7 @@ class IcyContext(object):
         # Acquire source once, then use that one return everywhere else.
         # Classic example of not-being-thread-safe in the old method.
         source = self.source
-        while source:
+        while source is not None:
             # Read data from the returned buffer
             data = source.read(size)
             # Refresh our source variable to point to the top source
