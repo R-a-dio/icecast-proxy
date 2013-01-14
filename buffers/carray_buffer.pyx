@@ -98,6 +98,8 @@ cdef class Buffer:
             
             
     def read(self, size):
+        if size > self.max_size:
+            size = self.max_size
         return self.cread(size)
         
     cdef bytes cread(Buffer self, unsigned int size):
@@ -157,6 +159,10 @@ cdef class Buffer:
             
     def __len__(Buffer self):
         return self.length
+        
+    def __repr__(Buffer self):
+        return "<Buffer size='{:s}' max_length='{:s}'>".format(self.max_size,
+                                                               self.length)
         
     cpdef object close(Buffer self):
         self.eof = 1
