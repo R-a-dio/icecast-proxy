@@ -155,7 +155,7 @@ cdef class Buffer:
             openmp.omp_unset_lock(&self.read_lock)
             # end thread safety
             
-        return out_buffer[:size]
+        return self.out_buffer[:size]
             
     def __len__(Buffer self):
         return self.length
