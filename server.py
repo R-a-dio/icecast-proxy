@@ -16,7 +16,7 @@ from buffers import Buffer
 
 
 socket.setdefaulttimeout(5.0)
-MAX_BUFFER = 24*1024*4 # Go about 192kbps (24kB/s) times two for a 2 second buffer
+MAX_BUFFER = 24*1024*2 # Go about 192kbps (24kB/s) times two for a 2 second buffer
 #MAX_DEQUES = 4
 logger = logging.getLogger('server')
 
