@@ -167,6 +167,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 if data == '':
                     break
                 self.audio_buffer.write(data)
+        except:
+            logger.exception("Timeout occured (most likely)")
         finally:
             logger.info("source: User '%s' logged off.", user)
             self.manager.remove_source(self.icy_client)
@@ -216,7 +218,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write('<?xml version="1.0"?>\n<iceresponse><message>Metadata update successful</message><return>1</return></iceresponse>')
                 except IOError as err:
                     if hasattr(err, 'errno') and err.errno == 32:
-                        logger.warning("Broken pipe exception, ignoring")
+                        #logger.warning("Broken pipe exception, ignoring")
+                        pass
                     else:
                         logger.exception("Error in request handler")
             elif parsed_url.path == "/admin/listclients":
