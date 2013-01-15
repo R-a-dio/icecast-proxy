@@ -161,8 +161,8 @@ cdef class Buffer:
         return self.length
         
     def __repr__(Buffer self):
-        return "<Buffer size='{:s}' max_length='{:s}'>".format(self.max_size,
-                                                               self.length)
+        return "<Buffer size='{:d}' max_length='{:d}'>".format(self.length,
+                                                               self.max_size)
         
     cpdef object close(Buffer self):
         self.eof = 1
