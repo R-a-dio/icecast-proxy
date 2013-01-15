@@ -65,17 +65,18 @@ class Icecast(object):
                     del self._saved_meta
 
                 buff = self.source.read(8192)
-                if not buff:
-                    # EOF
+                if buff == b'':
+                    # EOF received
                     self.close()
                     logger.error("Source EOF, closing ourself.")
                     break
-                try:
-                    self._shout.send(buff)
-                    self._shout.sync()
-                except (pylibshout.ShoutException) as err:
-                    logger.exception("Failed sending stream data.")
-                    self.reboot_libshout()
+                else:
+                    try:
+                        self._shout.send(buff)
+                        #self._shout.sync()
+                    except (pylibshout.ShoutException) as err:
+                        logger.exception("Failed sending stream data.")
+                        self.reboot_libshout()
 
             if not self._should_run.is_set():
                 time.sleep(self.connecting_timeout)

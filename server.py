@@ -304,9 +304,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             BaseServer.finish_request(self, request, client_address)
         except (IOError) as err:
             if hasattr(err, 'errno') and err.errno == 32:
-                logging.warning("Broken pipe exception, ignoring")
+                logger.warning("Broken pipe exception, ignoring")
             else:
-                logging.exception("Error in request handler")
+                logger.exception("Error in request handler")
 
 def run(server=ThreadedHTTPServer,
         handler=IcyRequestHandler,
